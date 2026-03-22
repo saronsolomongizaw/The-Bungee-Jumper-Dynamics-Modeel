@@ -1,17 +1,21 @@
 Web VPython 3.2
 from vpython import *
 
-scene.title = "Bungee Jump Simulation"
+# --- Scene Setup ---
+scene.title = " Bungee Jump simulation"
 scene.background = color.white 
 scene.width = 800
 scene.height = 600
 
 # --- Objects ---
-# Building (Moved to the side so jumper can fall)
-building = box(pos=vector(-10, 15, 0), size=vector(4, 30, 4), color=color.gray(0.5))
-top_edge = vector(-8, 30, 0) # The point where the cord is tied
+# Ground at y=0
+ground = box(pos=vector(0, -0.5, 0), size=vector(60, 1, 60), color=color.green)
 
-# Jumper (Created as a compound for easy movement)
+# Building (30 units high)
+building = box(pos=vector(-10, 15, 0), size=vector(4, 30, 4), color=color.gray(0.5))
+top_edge = vector(-8, 30, 0) # The anchor point for the cord
+
+# Jumper (Added make_trail to see the fall path)
 head = sphere(pos=vector(0,0,0), radius=0.4, color=color.yellow)
 body = cylinder(pos=vector(0,0,0), axis=vector(0,-1.2,0), radius=0.2, color=color.red)
 arm_left = cylinder(pos=vector(0,-0.2,0), axis=vector(0.8, 0.8, 0), radius=0.07, color=color.red)
@@ -20,55 +24,70 @@ leg1 = cylinder(pos=vector(0,-1.2,0), axis=vector(0.2,-0.8,0), radius=0.07, colo
 leg2 = cylinder(pos=vector(0,-1.2,0), axis=vector(-0.2,-0.8,0), radius=0.07, color=color.red)
 jumper = compound([head, body, arm_left, arm_right, leg1, leg2])
 
-# Initial position (standing on the edge)
+# Initial position
 jumper.pos = top_edge + vector(1, 0, 0)
 
-# Bungee cord (using a curve for better visuals)
-cord = cylinder(pos=top_edge, axis=jumper.pos - top_edge, radius=0.08, color=color.blue)
+# Bungee cord
+cord = cylinder(pos=top_edge, axis=jumper.pos - top_edge, radius=0.1, color=color.orange)
 
 # --- Physics Constants ---
 g = vector(0, -9.8, 0)
 m = 70
-k = 30        # Spring constant (stiffness)
-L0 = 10       # Natural (unstretched) length of cord
-b = 0.5       # Air resistance/damping (keeps them from bouncing forever)
+k = 120       # High stiffness to ensure a quick stop
+L0 = 10       # Shorter natural length gives more "braking distance"
+b = 1.8       # Higher damping to simulate cord internal friction and air resistance
 
 # Initial conditions
-v = vector(5, 3, 0)  # Initial jump: 3 units right, 2 units up
+v = vector(4, 2, 0)  # Initial outward jump velocity
 dt = 0.01
-t = 0
+# --- INITIALIZE THE TRACKERS HERE ---
+max_stretch = 0
+max_g_force = 0
 
 # --- Animation Loop ---
 while True:
     rate(100)
     
-    # 1. Calculate displacement from the anchor point
+    # 1. Calculate vector and distance from anchor
     r_vec = jumper.pos - top_edge
     distance = mag(r_vec)
     
-    # 2. Forces
+    # 2. Force Calculations
     # Gravity
     Fg = m * g
     
-    # Spring Force (only pulls if distance > natural length)
+    # Spring Force (Hooke's Law: only pulls when distance > L0)
     Fspring = vector(0,0,0)
     if distance > L0:
         stretch = distance - L0
-        # Hooke's Law: F = -k * x * direction
         Fspring = -k * stretch * norm(r_vec)
-    
-    # Damping (Air resistance)
+        if stretch > max_stretch:
+            max_stretch = stretch
+      
+        
+       
+    # Air resistance (Damping)
     Fdrag = -b * v
     
     # Net Force
     Fnet = Fg + Fspring + Fdrag
     
-    # 3. Update Physics (Euler-Cromer Integration)
+    # 3. Physics Integration (Euler-Cromer)
     a = Fnet / m
     v = v + a * dt
     jumper.pos = jumper.pos + v * dt
+    current_g = mag(a) / 9.8
+    if current_g > max_g_force:
+        max_g_force = current_g
     
-    # 4. Update Visual Cord
+    # 4. Visual Updates
     cord.axis = jumper.pos - top_edge
     
-    t += dt
+    # Failure condition: If the jumper's feet (approx y-1.5) hit the ground
+    if v.y > 0 and distance > L0: 
+        # 2. These lines are inside the "if" (2 tabs in)
+        print("--- LOWEST POINT REACHED ---")
+        print("MAX CORD STRETCH: ", round(max_stretch, 2), "m")
+        print("MAX G-FORCE:      ", round(max_g_force, 2), "g")
+        print("HEIGHT ABOVE GROUND: ", round(jumper.pos.y - 1.5, 2), "m")
+        break
